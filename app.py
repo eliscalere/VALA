@@ -1,16 +1,29 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from openai import OpenAI
 import io
-import openai
+import contextlib
 
-# Load OpenAI API key
-openai.api_key = st.secrets["openai_api_key"]
+# Set page config
+st.set_page_config(page_title="Chat-Driven Data Cleaner", layout="wide")
+st.title("📊 Chat-Driven Data Cleaner & Visualizer")
 
-st.title("Chat-Driven Data Cleaner & Visualizer")
+# Initialize OpenAI client
+client = OpenAI(api_key=st.secrets["openai_api_key"])
 
 # File uploader
-uploaded_file = st.file_uploader("Upload CSV/XLSX file", type=['csv', 'xlsx'])
+uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
+
+# Safe code executor
+def safe_exec(code_string, local_vars):
+    with contextlib.redirect_stdout(io.StringIO()) as f:
+        try:
+            exec(code_string, {}, local_vars)
+            result = f.getvalue()
+        except Exception as e:
+            result = f"❗ Error during execution: {e}"
+    return result
 
 if uploaded_file:
     if uploaded_file.name.endswith('.csv'):
@@ -18,35 +31,59 @@ if uploaded_file:
     else:
         df = pd.read_excel(uploaded_file)
 
-    st.write("### Uploaded Data", df)
+    st.subheader("📄 Uploaded Data")
+    st.dataframe(df)
 
-    # User query
-    query = st.text_input("Ask a question or request a graph (e.g., 'Clean data', 'Show sales by month')")
+    # Chat query input
+    query = st.text_input("Ask a question about your data (e.g., 'Show total sales per category', 'Clean missing values')")
 
     if query:
-        # Generate response from OpenAI
-        prompt = f"""You are a data analyst. The user uploaded this dataset:\n\n{df.head(5)}\n\nUser asked: {query}\n\nRespond with Python Pandas code that solves their request."""
-        
-        response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
+        with st.spinner("Processing your request..."):
+            prompt = f"""You are a helpful data analyst.
+The user uploaded this dataset:
+{df.head(5).to_markdown()}
 
-        code = response['choices'][0]['message']['content']
+User request: {query}
 
-        st.write("### Suggested Code", f"```python\n{code}\n```")
+Write Python Pandas and Plotly code to fulfill the request.
+- The dataframe is named 'df'.
+- If you create a Plotly figure, assign it to 'fig'.
+- Do not print explanations, only give code.
+- Always clean data safely.
+"""
 
-        # Execute code (safe eval for you later, but for demo we skip auto-execution)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
+            )
 
-        st.warning("Manual execution for safety. Copy code to test.")
+            code = response.choices[0].message.content
+            st.subheader("📝 Generated Code")
+            st.code(code, language='python')
 
-        # Example: Graph visualization (hardcoded example for demo)
-        if "sales" in query.lower():
-            if "month" in df.columns:
-                fig = px.bar(df, x="month", y=df.columns[1])
-                st.plotly_chart(fig)
+            # Execute generated code
+            locals_dict = {'df': df, 'st': st, 'px': px, 'pd': pd}
+            output = safe_exec(code, locals_dict)
 
-    # Download cleaned data
+            # Show any stdout output
+            if output.strip():
+                st.text(output)
+
+            # Show updated dataframe if modified
+            if 'df' in locals_dict:
+                df = locals_dict['df']
+                st.subheader("🔄 Updated Data")
+                st.dataframe(df)
+
+            # Show generated plot if available
+            if 'fig' in locals_dict:
+                st.subheader("📊 Visualization")
+                st.plotly_chart(locals_dict['fig'])
+
+    # Download button for cleaned data
     cleaned_csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("Download Cleaned CSV", cleaned_csv, "cleaned_data.csv", "text/csv")
+
+else:
+    st.info("Please upload a CSV or Excel file to get started.")
