@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import openai
 from openai import OpenAI
 import io
 import contextlib
@@ -10,9 +9,8 @@ import contextlib
 st.set_page_config(page_title="Chat Data Cleaner", layout="wide")
 st.title("📊 Chat-Driven Data Cleaner & Visualizer")
 
-# OpenAI API key setup
-openai.api_key = st.secrets["openai_api_key"]
-client = OpenAI()
+# Initialize OpenAI client (correct way for v1.x)
+client = OpenAI(api_key=st.secrets["openai_api_key"])
 
 # File uploader
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
