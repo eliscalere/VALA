@@ -1,21 +1,23 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import openai
 from openai import OpenAI
 import io
 import contextlib
 
-# Set page config
-st.set_page_config(page_title="Chat-Driven Data Cleaner", layout="wide")
+# Streamlit page settings
+st.set_page_config(page_title="Chat Data Cleaner", layout="wide")
 st.title("📊 Chat-Driven Data Cleaner & Visualizer")
 
-# Initialize OpenAI client
-client = OpenAI(api_key=st.secrets["openai_api_key"])
+# OpenAI API key setup
+openai.api_key = st.secrets["openai_api_key"]
+client = OpenAI()
 
 # File uploader
 uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
 
-# Safe code executor
+# Function to safely execute generated code
 def safe_exec(code_string, local_vars):
     with contextlib.redirect_stdout(io.StringIO()) as f:
         try:
@@ -35,7 +37,7 @@ if uploaded_file:
     st.dataframe(df)
 
     # Chat query input
-    query = st.text_input("Ask a question about your data (e.g., 'Show total sales per category', 'Clean missing values')")
+    query = st.text_input("Ask a question about your data (e.g., 'Show sales by category', 'Clean missing values')")
 
     if query:
         with st.spinner("Processing your request..."):
@@ -62,15 +64,15 @@ Write Python Pandas and Plotly code to fulfill the request.
             st.subheader("📝 Generated Code")
             st.code(code, language='python')
 
-            # Execute generated code
+            # Execute generated code safely
             locals_dict = {'df': df, 'st': st, 'px': px, 'pd': pd}
             output = safe_exec(code, locals_dict)
 
-            # Show any stdout output
+            # Show console output if any
             if output.strip():
                 st.text(output)
 
-            # Show updated dataframe if modified
+            # Show updated DataFrame if modified
             if 'df' in locals_dict:
                 df = locals_dict['df']
                 st.subheader("🔄 Updated Data")
